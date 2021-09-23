@@ -18,7 +18,7 @@ import websockets
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-from logic import initialize_game_state
+from logic import initialize_game_state, get_new_food
 
 
 host_ip = 'localhost'
@@ -31,6 +31,8 @@ sessions: dict[int, tuple[int, int]] = {} # SESSION ID -> CLIENT1, CLIENT2
 max_clients = 100
 max_sessions = 50
 max_game_iters = 200 # FIXME UZYJ TEGO!
+
+session_iter_synch: dict[int, dict[int, int]] = {}
 
 print(f"Initialized this snake game")
 
@@ -91,9 +93,11 @@ async def on_start(websocket, client_id):
     """
     global active_sessions
     global max_sessions
+    global sessions
     global waiting_sessions
     global clients_in_sessions
     global connected_clients
+    global session_iter_synch
 
     if len(active_sessions) < max_sessions:
 
@@ -117,31 +121,35 @@ async def on_start(websocket, client_id):
 
             else: # ADD TO SESSION
                 print(f"wbija do istniejacej {client_id}") # FIXME WYWAL
-                print(f"tu sie wywala {waiting_sessions}")# FIXME WYYWAL
                 available_session = random.choice(list(waiting_sessions.keys()))
                 active_sessions.add(available_session)
                 waiting_client = waiting_sessions.pop(available_session)
                 clients_in_sessions[client_id] = available_session
+                sessions[available_session] = (client_id, waiting_client)
+
+                session_iter_synch[available_session] = {client_id: 1, waiting_client: 1}
+
                 # clients_in_sessions[waiting_client] = available_session
                 # FIXME SEND MESSAGE THAT GAME CAN START
                 game_state = initialize_game_state()
                 
                 # TIXME JAK PRZESLAC TEMU TYPOWI CO CZEKAL WIADOMOSC!
                 for i, client in enumerate([waiting_client, client_id], 1):
-                    ws = connected_clients[client]
+                    if client == client_id:
+                        ws = websocket
+                    else:
+                        ws = connected_clients[client]
                     print(f"czy to zadziala = ws klientow: {ws}") # FIXME WYWAL
                     if i == 1:
                         ei = 2
                     else:
                         ei = 1
-                    # FIXME CLIENT!!!
                     response = {
                         'type': 'game_init',
                         'data': {'my_snake': f'snake_{i}', 'enemy_snake': f'snake_{ei}', **game_state}
                     }
                     print(response)
                     await ws.send(json.dumps(response))
-                    return
         
         else:
             response = {'error': 'The client is already in a session.'}
@@ -155,6 +163,90 @@ async def on_start(websocket, client_id):
     # self.clients_in_sessions: dict[int, int] = {} # CLIENT -> SESSION
     # self.active_sessions: set[int] = set()
     # self.waiting_sessions: dict[int, int] = {} # SESSION_ID -> WAITING CLIENT_ID
+
+async def process_game_iter(websocket, client_id, received_data, *args, **kwargs):
+    global active_sessions
+    global max_sessions
+    global waiting_sessions
+    global clients_in_sessions
+    global connected_clients
+    global sessions
+    global session_iter_synch
+
+    current_session = clients_in_sessions.get(client_id, None)
+    is_session_active = True if current_session in active_sessions else False
+
+    if client_id in clients_in_sessions and is_session_active:
+        # player in an active session
+
+        max_iter = session_iter_synch[current_session][client_id]
+        if received_data['iteration'] <= max_iter:
+            print(f"Stara wiadomosc {session_iter_synch[current_session]} <= {max_iter}")
+            return # DISCARD OLD DATA?
+        else:
+            session_iter_synch[current_session][client_id] = received_data['iteration']
+            print(f"Updated the session {session_iter_synch[current_session]}")
+
+        other_player_id = None
+        for player_id in sessions[current_session]:
+            if client_id != player_id:
+                other_player_id = player_id
+                break
+        
+        other_player_websocket = connected_clients[other_player_id]
+
+        print(f"received data: {received_data}") # FIXME WYWAL
+
+        message = {
+            'type': 'game_iter',
+            'client_id': client_id,
+            'data': {
+                'iteration': received_data['iteration'],
+                'enemy_snake_direction': received_data['my_snake_direction'],
+            }
+        }
+
+        print(f"sending message {message}")
+
+        await other_player_websocket.send(json.dumps(message))
+
+        if received_data['food_eaten']:
+            # W TYM PRZYPADKU MUSZE KAZDEMU WYSLAC INFO O NEW FOOD DODATKOWE! I OBSLUZYC 2 WIADOMOSCI OD NICH!
+            taken_coordinates = received_data['taken_coordinates']
+            # Generate new food
+            new_food = get_new_food(taken_coordinates)
+            food_message = {
+                'type': 'new_food',
+                'client_id': client_id,
+                'data': {
+                    'iteration': received_data['iteration'],
+                    'new_food': new_food['coordinates']
+                }
+            }
+            print(f"sending new food message {food_message}")
+            await other_player_websocket.send(json.dumps(food_message))
+            await websocket.send(json.dumps(food_message))
+        
+        if session_iter_synch[current_session][other_player_id] == session_iter_synch[current_session][client_id]:
+            await asyncio.sleep(0.2)
+            
+            print(f"Sessions synchronized.")
+
+            if session_iter_synch[current_session][other_player_id] == 150: # FIXME
+                print(f"Final interation in session.")
+                end_message = {'type': 'end_session', 'client_id': client_id, 'data': {}}
+                await other_player_websocket.send(json.dumps(end_message))
+                await websocket.send(json.dumps(end_message))
+            
+            print(f"-----------> Sending synch messages -------->{session_iter_synch[current_session]}")
+            synch_message = {'type': 'synchronize', 'client_id': client_id, 'data': {}}
+            await other_player_websocket.send(json.dumps(synch_message))
+            await websocket.send(json.dumps(synch_message))
+            
+
+    else:
+        print(f"Client: ({client_id}) is not in an active session.")
+
 
 async def keep_alive(self, websocket, *args, **kwargs):
     pass
@@ -186,8 +278,9 @@ async def server_handler(websocket, *args, **kwargs):
                     
                     # ADD TO THE SESSIONS DICT
                     pass
-                elif message_type == 'game':
-                    pass
+                elif message_type == 'game_iter':
+                    await process_game_iter(websocket, client_id, data)
+                    
 
                 elif message_type == "echo":
                     await websocket.send(json.dumps({"result":message}))

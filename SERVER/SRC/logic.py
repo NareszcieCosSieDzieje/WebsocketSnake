@@ -25,6 +25,7 @@ def initialize_direction(snake_coordinates: dict[str, int], board_width: int, bo
     return direction
 
 def get_free_coordinates(taken_coordinates: list[dict], board_width: int, board_height: int) -> dict[str, int]:
+
     x = None
     y = None
 
@@ -98,6 +99,22 @@ def initialize_game_state() -> dict:
     }
 
     return init_state
+
+
+def get_new_food(taken_coordinates: list[dict]) -> dict:
+    
+    GRID_SIZE = 20
+    BOARD_WIDTH = 30
+    BOARD_HEIGHT = 30
+    new_food_coords = get_free_coordinates(taken_coordinates, BOARD_WIDTH, BOARD_HEIGHT)
+    gridify = lambda pos: pos * GRID_SIZE
+
+    food: dict = {
+        'coordinates': {'x': gridify(new_food_coords['x']), 'y': gridify(new_food_coords['y'])},
+        'eaten': False
+    }
+
+    return food
 
 
 def get_iteration_message(snake1_direction: str, snake2_direction: str, food_eaten=False, game_over=False):

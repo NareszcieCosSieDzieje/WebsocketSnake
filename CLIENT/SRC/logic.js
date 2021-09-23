@@ -4,13 +4,21 @@
 // })
 
 var websocket;
+
+
 var clientID;
-var gridSize;
-var boardWidth;
-var boardHeight;
-var mySnake;
-var enemySnake; 
-var food;
+
+var maxFoodIteration = 1;
+
+window.game_synchronized = true;
+
+// var gridSize;
+// var boardWidth;
+// var boardHeight;
+// var mySnake;
+// var enemySnake; 
+// var food;
+// var iteration = 1;
 
 const socketMessageListener = (event) => {
 
@@ -21,25 +29,33 @@ const socketMessageListener = (event) => {
   
     switch (type) {
       case 'connect':
-        clientID = data.client_id;
+        window.clientID = data.client_id;
         break;
       case 'game_init':
-        gridSize = received_data.grid_size;
-        boardWidth = received_data.board_width;
-        boardHeight = received_data.board_height;
-        mySnake = received_data[received_data.my_snake];
-        enemySnake = received_data[received_data.enemy_snake];
-        food = received_data.food;
+        window.gridSize = received_data.grid_size;
+        window.boardWidth = received_data.board_width;
+        window.boardHeight = received_data.board_height;
+        window.mySnake = received_data[received_data.my_snake];
+        window.enemySnake = received_data[received_data.enemy_snake];
+        window.food = received_data.food;
+        window.iteration = 1;
         startGame();
         break;
       case 'game_iter':
         if (received_data.iteration >= window.iteration) {
-          enemySnake['direction'] = received_data.enemy_snake_dir
-          // FIXME changeDirection(window.enemySnake, newDirection)  DODAC TO JAK SIE ODBIERZE SYGNAL OD SERWERA
+          window.enemySnake['direction'] = received_data.enemy_snake_direction
+          // FIXME changeDirection(window.enemySnake, received_data.enemy_snake_dir)  DODAC TO JAK SIE ODBIERZE SYGNAL OD SERWERA
         }
-        if (received_data.new_food != {}) {
-          food = received_data.new_food
-        }
+        break;
+      case 'new_food':
+          if (received_data.iteration > maxFoodIteration) {
+            maxFoodIteration = received_data.iteration;
+            window.food['coordinates'] = received_data.new_food;
+          }
+        break;
+      case 'synchronize':
+          window.game_synchronized = true;
+        break;
       case 'server_dead':
         // FIXME:
         break;
@@ -104,7 +120,7 @@ document.addEventListener("DOMContentLoaded", function() {
 function start() {
   message = {
     'type': 'start',
-    'client_id': clientID,
+    'client_id': window.clientID,
     'data': {} // FIXME WYWAL?
   }
   websocket.send(JSON.stringify(message));
@@ -117,6 +133,10 @@ function max(a, b) {
 function startGame() {
 
   window.gameIsOver = false;
+
+  let mySnake = window.mySnake;
+  let enemySnake = window.enemySnake;
+  let food = window.food;
 
   // window.gridSize = 20;
 
@@ -149,7 +169,7 @@ function moveUp(snake) {
   movedHead = {...snake['coordinates'][0]};
   movedHead['y'] -= 1*gridSize;
   coordinates.unshift(movedHead);
-  if (snake['grow'] == true) {
+  if (snake['grow']) {
     snake['grow'] = false;
   } else {
     coordinates.pop();
@@ -162,7 +182,7 @@ function moveDown(snake){
   movedHead = {...snake['coordinates'][0]};
   movedHead['y'] += 1*gridSize;
   coordinates.unshift(movedHead)
-  if (snake['grow'] == true) {
+  if (snake['grow']) {
     snake['grow'] = false;
   } else {
     coordinates.pop();
@@ -175,7 +195,7 @@ function moveLeft(snake){
   movedHead = {...snake['coordinates'][0]};
   movedHead['x'] -= 1*gridSize;
   coordinates.unshift(movedHead);
-  if (snake['grow'] == true) {
+  if (snake['grow']) {
     snake['grow'] = false;
   } else {
     coordinates.pop();
@@ -188,7 +208,7 @@ function moveRight(snake) {
   movedHead = {...snake['coordinates'][0]};
   movedHead['x'] += 1*gridSize;
   coordinates.unshift(movedHead);
-  if (snake['grow'] == true) {
+  if (snake['grow']) {
     snake['grow'] = false;
   } else {
     coordinates.pop();
@@ -238,8 +258,8 @@ function eatFood(mySnake, enemySnake, food) {
 //TODO: CZY JA MAM RUSZAC CZYIMS?
 function moveDirection(mySnake, enemySnake) {
   
-  snakeArray = [mySnake] //, enemySnake]  // FIXME!!!!!!!!!!!!!!!!!!!!!!!!!!
-  // snakeArray = [mySnake, enemySnake]
+  // snakeArray = [mySnake] //, enemySnake]  // FIXME!!!!!!!!!!!!!!!!!!!!!!!!!!
+  snakeArray = [mySnake, enemySnake]
 
   for (let i=0; i < snakeArray.length; i++) { 
     snake = snakeArray[i];
@@ -371,7 +391,7 @@ function drawScene(mySnake, enemySnake, food, collisionStatus) {
   ctx.fillRect(food['coordinates']['x'], food['coordinates']['y'], gridSize, gridSize); 
 
 
-  if (collisionStatus != {}) {
+  if (Object.keys(collisionStatus).length !== 0) {
     if (collisionStatus['me'] == true) {
       drawX(mySnake['coordinates'][0]['x'], mySnake['coordinates'][0]['y'])
     }
@@ -383,7 +403,6 @@ function drawScene(mySnake, enemySnake, food, collisionStatus) {
   // TODO: CZY RYSOWANIE  PUNKTOW TEZ TU GDZIES??
 }
   
-
 
 function gameOver(collistionStatus) {
 
@@ -419,6 +438,12 @@ function sleep(ms) {
 
 async function gameIteration() {
 
+
+  if (!window.game_synchronized) {
+    return;
+  }
+  window.game_synchronized = false;
+
   let mySnake = window.mySnake;
   let enemySnake = window.enemySnake;
   let food = window.food;
@@ -434,7 +459,6 @@ async function gameIteration() {
     window.time = new Date();
     doLogic = true;
   }
-
   
   let context = {}
 
@@ -478,19 +502,21 @@ async function gameIteration() {
   window.food = food;
   window.iteration = iteration + 1;
 
-  message = {
-    'type': 'game_iter',
-    'client_id': clientID,
-    'data': {'iteration': window.iteration, 'mySnakeDirection': window.mySnake['direction'], 'food_eaten': food['eaten']}
-  }
-
-  websocket.send((JSON.stringify(message)));
-
+  let taken_coordinates = []
   // TODO CZY TO POTRZEBNE
   if (food['eaten'] == true) {
+    taken_coordinates = [mySnake['coordinates'], enemySnake['coordinates']];
     food['eaten'] = false
   }
 
+  message = {
+    'type': 'game_iter',
+    'client_id': clientID,
+    'data': {'iteration': window.iteration, 'my_snake_direction': window.mySnake['direction'], 'food_eaten': window.food['eaten'], 'taken_coordinates': taken_coordinates}
+    // 'data': {'iteration': iteration, 'mySnakeDirection': mySnake['direction'], 'food_eaten': food['eaten']}
+  }
+
+  websocket.send((JSON.stringify(message)));
 }
 
 
@@ -511,16 +537,16 @@ document.onkeydown = function(event) {
   
   switch(keyCode) {
     case 'ArrowLeft':
-        changeDirection(window.mySnake, 'left');
+        changeDirection(mySnake, 'left');
         break; 
     case 'ArrowUp':
-        changeDirection(window.mySnake, 'up');
+        changeDirection(mySnake, 'up');
         break; 
     case 'ArrowRight':
-        changeDirection(window.mySnake, 'right');
+        changeDirection(mySnake, 'right');
         break; 
     case 'ArrowDown':
-        changeDirection(window.mySnake, 'down');
+        changeDirection(mySnake, 'down');
         break; 
     // case 'keyA':
     //     changeDirection(window.enemySnake, 'left');
