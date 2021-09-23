@@ -1,9 +1,114 @@
 
+// websocket.addEventListener('close', () => {
+//   window.location.reload(true);
+// })
+
+var websocket;
+var clientID;
+var gridSize;
+var boardWidth;
+var boardHeight;
+var mySnake;
+var enemySnake; 
+var food;
+
+const socketMessageListener = (event) => {
+
+    data = JSON.parse(event.data);
+  
+    type = data['type']
+    received_data = data['data']
+  
+    switch (type) {
+      case 'connect':
+        clientID = data.client_id;
+        break;
+      case 'game_init':
+        gridSize = received_data.grid_size;
+        boardWidth = received_data.board_width;
+        boardHeight = received_data.board_height;
+        mySnake = received_data[received_data.my_snake];
+        enemySnake = received_data[received_data.enemy_snake];
+        food = received_data.food;
+        startGame();
+        break;
+      case 'game_iter':
+        if (received_data.iteration >= window.iteration) {
+          enemySnake['direction'] = received_data.enemy_snake_dir
+          // FIXME changeDirection(window.enemySnake, newDirection)  DODAC TO JAK SIE ODBIERZE SYGNAL OD SERWERA
+        }
+        if (received_data.new_food != {}) {
+          food = received_data.new_food
+        }
+      case 'server_dead':
+        // FIXME:
+        break;
+      default:
+          console.error(
+          "unsupported event", data);
+    }
+};
+  
+
+const socketOpenListener = (event) => {
+  connect();
+  console.log('Connected');
+  // websocket.send('hello');
+};
+
+const socketCloseListener = (event) => {
+  if (websocket) {
+    console.error('Disconnected.');
+  }
+  websocket = new WebSocket('ws://127.0.0.1:6789/'); 
+  websocket.addEventListener('open', socketOpenListener);
+  websocket.addEventListener('message', socketMessageListener);
+  websocket.addEventListener('close', socketCloseListener);
+};
+
+
+function checkSupported() {
+  canvas = document.getElementById('canvas');
+  if (canvas.getContext){
+    window.ctx = canvas.getContext('2d');
+  } else {
+    alert("We're sorry, but your browser does not support the canvas tag. Please use any web browser other than Internet Explorer.");
+  }
+}
+
+function connect() {
+  message = {
+    'type': "connect"
+  }
+  websocket.send(JSON.stringify(message));
+}
 
 document.addEventListener("DOMContentLoaded", function() {
   checkSupported();
-  startGame();
+  
+  startButton.addEventListener('click', (event) => {
+    start();
+  })
+  socketCloseListener();
+  
+  // websocket = new WebSocket("ws://localhost:6666");
+  // websocket.addEventListener('open', () => {
+  //   console.log('Connected to Server!')
+  //   connect();
+  // })
+    // connect();
+  // startGame();
 });
+
+
+function start() {
+  message = {
+    'type': 'start',
+    'client_id': clientID,
+    'data': {} // FIXME WYWAL?
+  }
+  websocket.send(JSON.stringify(message));
+}
 
 function max(a, b) {
   return a > b ? a : b;
@@ -12,36 +117,32 @@ function max(a, b) {
 function startGame() {
 
   window.gameIsOver = false;
-  window.gridSize = 20;
 
-  mySnake = {'coordinates': [{'x': 20, 'y': 20}], 'direction': 'right', 'score': 0, 'grow': false};
-  enemySnake = {'coordinates': [{'x': 40, 'y': 80}], 'direction': 'left', 'score': 0, 'grow': false};
-  food = {'coordinates': {'x': 80, 'y': 80}, 'eaten': false};
+  // window.gridSize = 20;
+
+  // mySnake = {'coordinates': [{'x': 20, 'y': 20}], 'direction': 'right', 'score': 0, 'grow': false};
+  // enemySnake = {'coordinates': [{'x': 40, 'y': 80}], 'direction': 'left', 'score': 0, 'grow': false};
+  // food = {'coordinates': {'x': 80, 'y': 80}, 'eaten': false};
+
+  // window.mySnake = mySnake;
+  // window.enemySnake = enemySnake;
+  // window.food = food;
+  // window.boardWidth = 600; //FIXME!!
+  // window.boardHeight = 600; // FIXME!!
 
   ctx = window.ctx;
   ctx.clearRect(0,0, canvas.width, canvas.height);
-
-  // JAKIES ID DO WYJMOWANIA DANYCH ktore sie dostalo
-
-  // FIXME: snakei maja score 0 i maja miec ze grow false i food ze eaten == false!!!!
 
   updateScores(mySnake, enemySnake);
   drawScene(mySnake, enemySnake, food, {});
 
   window.allowPressKeys = true;
-  window.mySnake = mySnake;
-  window.enemySnake = enemySnake;
-  window.food = food;
   window.iteration = 1
-  window.boardWidth = 600; //FIXME!!
-  window.boardHeight = 600; // FIXME!!
-  window.intervalID = setInterval(gameIteration, 70);
+  
+  window.intervalID = setInterval(gameIteration, 1000);
   window.time = new Date(); 
 }
    
-
-// FIXME changeDirection(window.enemySnake, newDirection)  DODAC TO JAK SIE ODBIERZE SYGNAL OD SERWERA
-
 
 function moveUp(snake) {
   coordinates = snake['coordinates'];
@@ -218,16 +319,6 @@ function checkCollisions(mySnake, enemySnake, boardWidth, boardHeight) {
   return collisionStatus;
 }
 
-
-function checkSupported() {
-  canvas = document.getElementById('canvas');
-  if (canvas.getContext){
-    window.ctx = canvas.getContext('2d');
-  } else {
-    alert("We're sorry, but your browser does not support the canvas tag. Please use any web browser other than Internet Explorer.");
-  }
-}
-
   
 function restart(){
   pause();
@@ -367,11 +458,11 @@ async function gameIteration() {
 
     mySnake, enemySnake, food = eatFood(mySnake, enemySnake, food);
 
-    if (food['eaten'] == true) {
-      // TODO: notify server
-      food['eaten'] = false
-      food['coordinates'] = {'x': food['coordinates']['x']+1*gridSize, 'y': food['coordinates']['y']+1*gridSize} //FIXME
-    }
+    // if (food['eaten'] == true) {
+    //   // TODO: notify server
+    //   food['eaten'] = false
+    //   food['coordinates'] = {'x': food['coordinates']['x']+1*gridSize, 'y': food['coordinates']['y']+1*gridSize} //FIXME
+    // }
 
     updateScores(mySnake, enemySnake)
 
@@ -387,9 +478,18 @@ async function gameIteration() {
   window.food = food;
   window.iteration = iteration + 1;
 
-  // TODO: SEND DATA TO THE SERVER LIKE -> mySnake['direction']
+  message = {
+    'type': 'game_iter',
+    'client_id': clientID,
+    'data': {'iteration': window.iteration, 'mySnakeDirection': window.mySnake['direction'], 'food_eaten': food['eaten']}
+  }
 
-  // TODO: RETURN STATUSES ?
+  websocket.send((JSON.stringify(message)));
+
+  // TODO CZY TO POTRZEBNE
+  if (food['eaten'] == true) {
+    food['eaten'] = false
+  }
 
 }
 
@@ -422,23 +522,20 @@ document.onkeydown = function(event) {
     case 'ArrowDown':
         changeDirection(window.mySnake, 'down');
         break; 
-    case 'keyA':
-        changeDirection(window.enemySnake, 'left');
-        break; 
-    case 'keyW':
-        changeDirection(window.enemySnake, 'up');
-        break; 
-    case 'keyD':
-        changeDirection(window.enemySnake, 'right');
-        break; 
-    case 'keyS':
-        changeDirection(window.enemySnake, 'down');
-        break; 
+    // case 'keyA':
+    //     changeDirection(window.enemySnake, 'left');
+    //     break; 
+    // case 'keyW':
+    //     changeDirection(window.enemySnake, 'up');
+    //     break; 
+    // case 'keyD':
+    //     changeDirection(window.enemySnake, 'right');
+    //     break; 
+    // case 'keyS':
+    //     changeDirection(window.enemySnake, 'down');
+    //     break; 
     default: 
         break; 
   } 
 }
   
-
-
-
