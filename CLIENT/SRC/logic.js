@@ -44,6 +44,7 @@ const socketMessageListener = (event) => {
       case 'game_iter':
         if (received_data.iteration >= window.iteration) {
           window.enemySnake['direction'] = received_data.enemy_snake_direction
+          window.enemySnake['coordinates'] = received_data.enemy_snake_coordinates
           // FIXME changeDirection(window.enemySnake, received_data.enemy_snake_dir)  DODAC TO JAK SIE ODBIERZE SYGNAL OD SERWERA
         }
         break;
@@ -52,6 +53,20 @@ const socketMessageListener = (event) => {
             maxFoodIteration = received_data.iteration;
             window.food['coordinates'] = received_data.new_food;
           }
+        break;
+      case 'change_direction':
+          // if (received_data.new_direction) {
+            window.enemySnake['direction'] = received_data.new_direction
+            message = {
+              'type': 'ack_change_direction',
+              'client_id': window.clientID
+            }
+            websocket.send(JSON.stringify(message))
+            // }
+        break;
+        case 'ack_change_direction':
+          // sprawdzanie iteracji ?
+            window.mySnake['direction'] = window.direction_to_ack;
         break;
       case 'synchronize':
           window.game_synchronized = true;
@@ -74,7 +89,7 @@ const socketOpenListener = (event) => {
 
 const socketCloseListener = (event) => {
   if (websocket) {
-    console.error('Disconnected.');
+    console.info('Connected.');
   }
   websocket = new WebSocket('ws://127.0.0.1:6789/'); 
   websocket.addEventListener('open', socketOpenListener);
@@ -227,9 +242,22 @@ function changeDirection(snake, newDirection) {
   } else if (direction == 'right' && newDirection != 'left') {
     direction = newDirection;
   } 
+  // if (websocket) {
+  //   message = {
+  //     'type': 'change_direction',
+  //     'client_id': window.clientID,
+  //     'data': {
+  //       'new_direction': direction
+  //     }
+  //   }
+    // window.direction_to_ack = direction;
+    // websocket.send(JSON.stringify(message)) //FIXME
+  // }
+  window.allowPressKeys = false;
+  setTimeout(() => {window.allowPressKeys = true}, 300);
   snake['direction'] = direction
 
-  return snake
+  return snake;
 }
 
 function eatFood(mySnake, enemySnake, food) {
@@ -273,7 +301,9 @@ function moveDirection(mySnake, enemySnake) {
     } else if (snakeDirection == 'down'){
       moveDown(snake)
     }
-  } 
+  }
+  window.mySnake = mySnake;
+  window.enemySnake = enemySnake; 
   return mySnake, enemySnake
 }
 
@@ -351,7 +381,7 @@ function pause() {
 }
   
 function play() { //FIXME
-  var interval = setInterval(drawScene, 100);
+  var interval = setInterval(drawScene, 500);
   window.allowPressKeys = true;
 }
   
@@ -438,10 +468,11 @@ function sleep(ms) {
 
 async function gameIteration() {
 
-
   if (!window.game_synchronized) {
     return;
   }
+
+  window.allowPressKeys = false;
   window.game_synchronized = false;
 
   let mySnake = window.mySnake;
@@ -472,10 +503,15 @@ async function gameIteration() {
   }
 
   if (doLogic){
-    mySnake, enemySnake = moveDirection(mySnake, enemySnake);
+    // mySnake, enemySnake = moveDirection(mySnake, enemySnake);
+    setTimeout(moveDirection, 200, mySnake, enemySnake);
   }
 
-  drawScene(mySnake, enemySnake, food, context);
+  mySnake = window.mySnake
+  enemySnake = window.enemySnake
+
+  setTimeout(drawScene, 200, mySnake, enemySnake, food, context); // enable receiving messages
+  // drawScene(mySnake, enemySnake, food, context);
 
   if (doLogic) {
     let collisionStatus = checkCollisions(mySnake, enemySnake, boardWidth, boardHeight);
@@ -504,19 +540,24 @@ async function gameIteration() {
 
   let taken_coordinates = []
   // TODO CZY TO POTRZEBNE
-  if (food['eaten'] == true) {
-    taken_coordinates = [mySnake['coordinates'], enemySnake['coordinates']];
-    food['eaten'] = false
+  if (food['eaten']) {
+    taken_coordinates = [].concat.apply([], [mySnake['coordinates'], enemySnake['coordinates']]);
   }
 
   message = {
     'type': 'game_iter',
     'client_id': clientID,
-    'data': {'iteration': window.iteration, 'my_snake_direction': window.mySnake['direction'], 'food_eaten': window.food['eaten'], 'taken_coordinates': taken_coordinates}
+    // 'data': {'iteration': window.iteration, 'my_snake_direction': window.mySnake['direction'], 'food_eaten': window.food['eaten'], 'taken_coordinates': taken_coordinates}
+    'data': {'iteration': window.iteration, 'my_snake': window.mySnake['coordinates'], 'my_snake_direction': window.mySnake['direction'], 'food_eaten': window.food['eaten'], 'taken_coordinates': taken_coordinates}
     // 'data': {'iteration': iteration, 'mySnakeDirection': mySnake['direction'], 'food_eaten': food['eaten']}
   }
 
+  if (food['eaten']) {
+    window.food['eaten'] = false
+  }
+
   websocket.send((JSON.stringify(message)));
+  window.allowPressKeys = true;
 }
 
 
@@ -537,16 +578,16 @@ document.onkeydown = function(event) {
   
   switch(keyCode) {
     case 'ArrowLeft':
-        changeDirection(mySnake, 'left');
+        changeDirection(window.mySnake, 'left');
         break; 
     case 'ArrowUp':
-        changeDirection(mySnake, 'up');
+        changeDirection(window.mySnake, 'up');
         break; 
     case 'ArrowRight':
-        changeDirection(mySnake, 'right');
+        changeDirection(window.mySnake, 'right');
         break; 
     case 'ArrowDown':
-        changeDirection(mySnake, 'down');
+        changeDirection(window.mySnake, 'down');
         break; 
     // case 'keyA':
     //     changeDirection(window.enemySnake, 'left');

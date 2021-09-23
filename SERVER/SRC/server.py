@@ -203,6 +203,7 @@ async def process_game_iter(websocket, client_id, received_data, *args, **kwargs
             'data': {
                 'iteration': received_data['iteration'],
                 'enemy_snake_direction': received_data['my_snake_direction'],
+                'enemy_snake_coordinates': received_data['my_snake'],
             }
         }
 
@@ -232,7 +233,7 @@ async def process_game_iter(websocket, client_id, received_data, *args, **kwargs
             
             print(f"Sessions synchronized.")
 
-            if session_iter_synch[current_session][other_player_id] == 150: # FIXME
+            if session_iter_synch[current_session][other_player_id] == 100: # FIXME
                 print(f"Final interation in session.")
                 end_message = {'type': 'end_session', 'client_id': client_id, 'data': {}}
                 await other_player_websocket.send(json.dumps(end_message))
@@ -242,14 +243,64 @@ async def process_game_iter(websocket, client_id, received_data, *args, **kwargs
             synch_message = {'type': 'synchronize', 'client_id': client_id, 'data': {}}
             await other_player_websocket.send(json.dumps(synch_message))
             await websocket.send(json.dumps(synch_message))
-            
 
     else:
         print(f"Client: ({client_id}) is not in an active session.")
 
 
-async def keep_alive(self, websocket, *args, **kwargs):
-    pass
+async def send_change_direction(websocket, client_id, data, *args, **kwargs):
+    global active_sessions
+    global clients_in_sessions
+    global connected_clients
+    global sessions
+
+    current_session = clients_in_sessions.get(client_id, None)
+    is_session_active = True if current_session in active_sessions else False
+
+    if client_id in clients_in_sessions and is_session_active:
+        # player in an active session
+
+        other_player_id = None
+        for player_id in sessions[current_session]:
+            if client_id != player_id:
+                other_player_id = player_id
+                break
+        message = {
+            'type': 'change_direction',
+            'client_id': client_id,
+            'data': data
+        }
+        other_player_websocket = connected_clients[other_player_id]
+        other_player_websocket.send(json.dumps(message))
+    else:
+        print(f"Client: ({client_id}) is not in an active session.")
+
+async def ack_change_direction(websocket, client_id, *args, **kwargs):
+    
+    global active_sessions
+    global clients_in_sessions
+    global connected_clients
+    global sessions
+
+    current_session = clients_in_sessions.get(client_id, None)
+    is_session_active = True if current_session in active_sessions else False
+
+    if client_id in clients_in_sessions and is_session_active:
+        # player in an active session
+
+        other_player_id = None
+        for player_id in sessions[current_session]:
+            if client_id != player_id:
+                other_player_id = player_id
+                break
+        message = {
+            'type': 'ack_change_direction',
+            'client_id': client_id,
+        }
+        other_player_websocket = connected_clients[other_player_id]
+        other_player_websocket.send(json.dumps(message))
+    else:
+        print(f"Client: ({client_id}) is not in an active session.")
 
 
 async def server_handler(websocket, *args, **kwargs):
@@ -277,10 +328,13 @@ async def server_handler(websocket, *args, **kwargs):
                     await on_start(websocket, client_id)
                     
                     # ADD TO THE SESSIONS DICT
-                    pass
                 elif message_type == 'game_iter':
                     await process_game_iter(websocket, client_id, data)
-                    
+                elif message_type == 'change_direction':
+                    await send_change_direction(websocket, client_id, data)
+
+                elif message_type == 'ack_change_direction':
+                    await ack_change_direction(websocket, client_id)
 
                 elif message_type == "echo":
                     await websocket.send(json.dumps({"result":message}))
