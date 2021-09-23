@@ -8,7 +8,7 @@ def initialize_direction(snake_coordinates: dict[str, int], board_width: int, bo
     x = snake_coordinates['x']
     y = snake_coordinates['y']
     
-    valid_directions = ['up', 'down', 'left', 'right'] # TODO ENUM 
+    valid_directions = ['up', 'down', 'left', 'right']
 
     TRESHOLD = 3
 
@@ -44,28 +44,54 @@ def get_free_coordinates(taken_coordinates: list[dict], board_width: int, board_
     return {'x': x, 'y': y}
 
 
-def initialize_game_state():
+def initialize_game_state() -> dict:
 
-    BOARD_WIDTH = 40
-    BOARD_HEIGHT = 40
+    GRID_SIZE = 20
+    BOARD_WIDTH = 30
+    BOARD_HEIGHT = 30
 
     snake1_x_coordinate = random.randint(0, BOARD_WIDTH-1)
     snake1_y_coordinate = random.randint(0, BOARD_HEIGHT-1)
 
-    snake1: dict[str, Union[int, str]] = {
-        'x': snake1_x_coordinate,
-        'y': snake1_y_coordinate
+    snake1: dict = {
+        'coordinates': [{
+            'x': snake1_x_coordinate,
+            'y': snake1_y_coordinate
+        }],
+        'grow': False,
+        'score': 0
     }
 
-    snake1['direction'] = initialize_direction(snake_coordinates=snake1, board_width=BOARD_WIDTH, board_height=BOARD_HEIGHT)
+    snake1['direction'] = initialize_direction(snake_coordinates=snake1['coordinates'][0], board_width=BOARD_WIDTH, board_height=BOARD_HEIGHT)
     
-    snake2 = get_free_coordinates(taken_coordinates=[snake1], board_width=BOARD_WIDTH, board_height=BOARD_HEIGHT)
+    snake2: dict =  {
+        'coordinates': [get_free_coordinates(taken_coordinates=snake1['coordinates'], board_width=BOARD_WIDTH, board_height=BOARD_HEIGHT)],
+        'grow': False,
+        'score': 0
+    } 
 
-    snake2['direction'] = initialize_direction(snake_coordinates=snake2, board_width=BOARD_WIDTH, board_height=BOARD_HEIGHT)
+    snake2['direction'] = initialize_direction(snake_coordinates=snake2['coordinates'][0], board_width=BOARD_WIDTH, board_height=BOARD_HEIGHT)
     
-    food = get_free_coordinates([snake1, snake2], board_width=BOARD_WIDTH, board_height=BOARD_HEIGHT)
+    food: dict = {
+        'coordinates': get_free_coordinates(taken_coordinates=snake1['coordinates']+snake2['coordinates'], board_width=BOARD_WIDTH, board_height=BOARD_HEIGHT),
+        'eaten': False
+    }
 
-    init_state = {
+    gridify = lambda pos: pos * GRID_SIZE
+
+    for item in [snake1, snake2]:
+        item['coordinates'] = [{'x': gridify(coordinates['x']), 'y': gridify(coordinates['y'])} for coordinates in item['coordinates']]
+    
+    food['coordinates'] = {'x': gridify(food['coordinates']['x']), 'y': gridify(food['coordinates']['y'])}
+
+    # FIXME CONSTANTS
+    BOARD_WIDTH = gridify(BOARD_WIDTH)
+    BOARD_HEIGHT = gridify(BOARD_HEIGHT)
+
+    init_state: dict = {
+        'grid_size': GRID_SIZE,
+        'board_width': BOARD_WIDTH,
+        'board_height': BOARD_HEIGHT,
         'snake_1': snake1,
         'snake_2': snake2,
         'food': food
@@ -74,7 +100,8 @@ def initialize_game_state():
     return init_state
 
 
-# TODO: CHYBA PO STRONIE KLIENTA
-# def check_collisions(snake_1: list[dict], snake_2: list[dict], food: list[dict], board_width: int, board_height: int):
-#     if snake_1[]
-    
+def get_iteration_message(snake1_direction: str, snake2_direction: str, food_eaten=False, game_over=False):
+    pass
+
+def pass_iteration_data():
+    pass
