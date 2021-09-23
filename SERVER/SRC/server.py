@@ -31,6 +31,7 @@ sessions: dict[int, tuple[int, int]] = {} # SESSION ID -> CLIENT1, CLIENT2
 max_clients = 100
 max_sessions = 50
 max_game_iters = 200 # FIXME UZYJ TEGO!
+max_food_iteration = 0
 
 session_iter_synch: dict[int, dict[int, int]] = {}
 
@@ -77,10 +78,22 @@ async def on_disconnect(websocket, client_id):
     """
     global connected_clients
     global clients_in_sessions
+    global active_sessions
+    global waiting_sessions
+    global sessions
 
     try:
         connected_clients.pop(client_id)
-        clients_in_sessions.pop(client_id) # TODO: ZATRZYMAJ SESJE
+        clients_session = clients_in_sessions.pop(client_id)
+        active_sessions.discard(clients_session)
+        waiting_sessions.discard(clients_session)
+        res = sessions.pop(clients_session, None)
+        if res is not None:
+            for c in res:
+                if c != client_id:
+                    ws = connected_clients[c]
+                    ws.send(json.dumps({'disconnect', 'client_id', client_id}))
+
         # TODO CLEAR SESION DATA!!
         await websocket.close(code=1000, reason='')
     except KeyError:
@@ -172,6 +185,7 @@ async def process_game_iter(websocket, client_id, received_data, *args, **kwargs
     global connected_clients
     global sessions
     global session_iter_synch
+    global max_food_iteration
 
     current_session = clients_in_sessions.get(client_id, None)
     is_session_active = True if current_session in active_sessions else False
@@ -211,7 +225,8 @@ async def process_game_iter(websocket, client_id, received_data, *args, **kwargs
 
         await other_player_websocket.send(json.dumps(message))
 
-        if received_data['food_eaten']:
+        if received_data['food_eaten']: #FIXME? and max_food_iteration < received_data['iteration']:
+            # max_food_iteration = received_data['iteration']
             # W TYM PRZYPADKU MUSZE KAZDEMU WYSLAC INFO O NEW FOOD DODATKOWE! I OBSLUZYC 2 WIADOMOSCI OD NICH!
             taken_coordinates = received_data['taken_coordinates']
             # Generate new food
@@ -321,7 +336,7 @@ async def server_handler(websocket, *args, **kwargs):
             if client_id is not None:                    
                 
                 if message_type == "disconnect":
-                    print(f"Disconnecting...")
+                    print(f"Disconnecting... {client_id}")
                     await on_disconnect(websocket, client_id)
                 elif message_type == 'start':
                     print(f"Starting...")
@@ -330,18 +345,18 @@ async def server_handler(websocket, *args, **kwargs):
                     # ADD TO THE SESSIONS DICT
                 elif message_type == 'game_iter':
                     await process_game_iter(websocket, client_id, data)
-                elif message_type == 'change_direction':
-                    await send_change_direction(websocket, client_id, data)
+                # elif message_type == 'change_direction':
+                #     await send_change_direction(websocket, client_id, data)
 
-                elif message_type == 'ack_change_direction':
-                    await ack_change_direction(websocket, client_id)
+                # elif message_type == 'ack_change_direction':
+                #     await ack_change_direction(websocket, client_id)
 
-                elif message_type == "echo":
-                    await websocket.send(json.dumps({"result":message}))
+                # elif message_type == "echo":
+                #     await websocket.send(json.dumps({"result":message}))
 
             else:
                 # send response and disconnect
-                logger.error(f"lol dziwny message {websocket}")
+                logger.error(f"unkown message type {websocket}")
                 # await (websocket, client_id, message_type, data)
     except websockets.exceptions.ConnectionClosedError as cce:
         pass

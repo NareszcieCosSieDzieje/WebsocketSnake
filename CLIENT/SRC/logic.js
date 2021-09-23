@@ -68,6 +68,10 @@ const socketMessageListener = (event) => {
           // sprawdzanie iteracji ?
             window.mySnake['direction'] = window.direction_to_ack;
         break;
+        case 'disconnect':
+          window.gameIsOver = true;
+          window.game_synchronized = true;
+        break;
       case 'synchronize':
           window.game_synchronized = true;
         break;
@@ -89,7 +93,7 @@ const socketOpenListener = (event) => {
 
 const socketCloseListener = (event) => {
   if (websocket) {
-    console.info('Connected.');
+    console.info('Disconnected.');
   }
   websocket = new WebSocket('ws://127.0.0.1:6789/'); 
   websocket.addEventListener('open', socketOpenListener);
@@ -441,14 +445,16 @@ function gameOver(collistionStatus) {
 
   pause();
   if (mySnakeDead && enemySnakeDead) {
-    alert("Game Over. Your score was "); //fixme + score
+    alert(`Game Over. Your score was ${mySnake.score}`); //fixme + score
   } else if (enemySnakeDead) {
-    alert("You win!. Your score was ");
+    alert(`You win!. Your score was ${mySnake.score}`);
   } else if (mySnakeDead) {
-    alert("You loose :<. Your score was ");
+    alert(`You loose :<. Your score was ${mySnake.score}`);
   }
-  
+
+  websocket.send(JSON.stringify({'type': 'disconnect', 'client_id': clientID}))
   window.ctx.clearRect(0,0, canvas.width, canvas.height);
+  window.location.reload(true);
   // document.getElementById('play_menu').style.display='none'; //FIXME!!!
   // document.getElementById('restart_menu').style.display='block';
 }
@@ -457,8 +463,8 @@ function updateScores(mySnake, enemySnake){
   let myScore = mySnake['score']
   let enemyScore = enemySnake['score']
 
-  // document.getElementById('myScore').innerText = myScore; //FIXME
-  // document.getElementById('enemyScore').innerText = enemyScore;
+  document.getElementById('my_score').innerText = `My Score: ${myScore}`; //FIXME
+  // document.getElementById('enemy_score').innerText = `Enemy Score: ${enemyScore}`;
 }
   
 function sleep(ms) {

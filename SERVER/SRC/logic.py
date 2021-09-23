@@ -10,7 +10,7 @@ def initialize_direction(snake_coordinates: dict[str, int], board_width: int, bo
     
     valid_directions = ['up', 'down', 'left', 'right']
 
-    TRESHOLD = 3
+    TRESHOLD = 4
 
     if x - TRESHOLD <= 0:
         valid_directions.remove('left')
@@ -45,6 +45,41 @@ def get_free_coordinates(taken_coordinates: list[dict], board_width: int, board_
     return {'x': x, 'y': y}
 
 
+# def append_tail(snake: dict, taken_coordinates: list[dict], board_width: int, board_height: int):
+#     opposite_dirs = {
+#         'right': 'left',
+#         'left': 'right',
+#         'up': 'down',
+#         'down': 'up'
+#     }
+
+#     valid_directions = ['up', 'down', 'left', 'right']
+
+#     head = snake['coordinates'][0]
+#     direction = snake['direction']
+#     x, y = head['x'], head['y']
+
+#     valid_directions.remove(direction)
+#     valid_directions.remove(opposite_dirs[direction])
+
+#     dir = random.choice(valid_directions)
+#     if dir == 'up':
+#         tail = [{'x': x, 'y': y+1}, {'x': x, 'y': y+2}]
+#     elif dir == 'down':   
+#         tail = [{'x': x, 'y': y-1}, {'x': x, 'y': y-2}]
+#     elif dir == 'right':   
+#         tail = [{'x': x+1, 'y': y}, {'x': x+2, 'y': y}]
+#     elif dir == 'left':   
+#         tail = [{'x': x-1, 'y': y}, {'x': x-2, 'y': y}]
+
+#     for t in tail:
+#         if t in taken_coordinates:
+#             break
+#         else:
+#             snake['coordinates'].extend(tail)
+#     return snake
+
+
 def initialize_game_state() -> dict:
 
     GRID_SIZE = 20
@@ -72,7 +107,7 @@ def initialize_game_state() -> dict:
     } 
 
     snake2['direction'] = initialize_direction(snake_coordinates=snake2['coordinates'][0], board_width=BOARD_WIDTH, board_height=BOARD_HEIGHT)
-    
+
     food: dict = {
         'coordinates': get_free_coordinates(taken_coordinates=snake1['coordinates']+snake2['coordinates'], board_width=BOARD_WIDTH, board_height=BOARD_HEIGHT),
         'eaten': False
